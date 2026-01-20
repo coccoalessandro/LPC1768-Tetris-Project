@@ -23,6 +23,10 @@ extern int currentScore;
 extern int updateScore;
 extern int clearedLines;
 
+extern void generatePowerUp(int matrice[20][10]);
+extern int countLines(int matrice[20][10]);
+extern void generateMalus(int matrice[20][10]);
+
 /******************************************************************************
 ** Function name:		Timer0_IRQHandler
 **
@@ -62,6 +66,16 @@ int generateNewBlock = 0;
 int moveOn;
 int stop;
 
+uint16_t SinTable[45] =                                       
+{
+    410, 467, 523, 576, 627, 673, 714, 749, 778,
+    799, 813, 819, 817, 807, 789, 764, 732, 694, 
+    650, 602, 550, 495, 438, 381, 324, 270, 217,
+    169, 125, 87 , 55 , 30 , 12 , 2  , 0  , 6  ,   
+    20 , 41 , 70 , 105, 146, 193, 243, 297, 353
+};
+
+
 void TIMER0_IRQHandler (void)
 {
 	if (generateNewBlock == 0) {
@@ -99,16 +113,39 @@ void TIMER0_IRQHandler (void)
 		}
 		
 		int numLines = 0;
+		
 		// resetta la linea se completa
 			int i,j;
 			for (i=19; i>=0; i--) {
+				int powerUpCleared = 0;
 				int count = 0;
 				for (j=9; j>=0; j--) {
 					if (matrice[i][j] > 10) {
 						count++;
+						if (matrice[i][j] == 99) {
+							powerUpCleared = 1;
+						}
 					}
 				}
 				if (count == 10) {
+					if (powerUpCleared == 1) {
+						// clears half of the lines
+						int n = countLines(matrice);
+						int x,y;
+						for (x=19; x>=10; x--) {
+							for (y=0; y<10; y++) {
+								matrice[x][y] = matrice[x-10][y];
+								matrice[x-10][y] = 0;
+							}
+						}
+						int m = n/4;
+						currentScore += 600*m;
+						currentScore += 100*(n-(m*4));
+						
+						// attiva lo slow down
+						
+						activate_slow_down();
+					}
 					numLines += 1;
 					clearedLines += 1;
 					currentScore += 100;
@@ -127,12 +164,21 @@ void TIMER0_IRQHandler (void)
 					//drawMatrix(matrice);
 					update_matrix = 1;
 					i++;
+					if (clearedLines % 5 == 0) {
+						generatePowerUp(matrice);
+					}
+					
+					if (clearedLines % 10 == 0) {
+						// malus
+						generateMalus(matrice);
+					}
 				}
 			}
 			if (numLines == 4) {
 				currentScore += 200;
 				updateScore = 1;
 			}
+			
 	
 	/* alternatively to LED_On and LED_off try to use LED_Out */
 	//LED_Out((1<<position)|(led_value & 0x3));							
@@ -155,12 +201,21 @@ void TIMER0_IRQHandler (void)
 ******************************************************************************/
 void TIMER1_IRQHandler (void)
 {
+	disable_timer(2);
   LPC_TIM1->IR = 0x3F;			/* clear interrupt flag */
   return;
 }
 
 void TIMER2_IRQHandler (void)
 {
+	static int sineticks=0;
+	/* DAC management */	
+	static int currentValue; 
+	currentValue = SinTable[sineticks];
+	LPC_DAC->DACR = currentValue <<6;
+	sineticks++;
+	if(sineticks==45) sineticks=0;
+
   LPC_TIM2->IR = 0x3F;			/* clear interrupt flag */
   return;
 }

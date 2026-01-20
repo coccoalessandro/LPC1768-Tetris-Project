@@ -23,17 +23,21 @@
 #include "../GLCD/GLCD.h"
 #include "../joystick/joystick.h"
 #include "../tetris.c"
+#include "adc/adc.h"
 
 extern int matrice[20][10];
-int update_matrix = 0;
 extern int generateNewBlock;
 //int joystick_down = 0; 
 int hard_drop = 0;
 int gameState = 3;
+int update_matrix = 1;
 int currentScore;
 int topScore = 0;
 int clearedLines = 0;
 int updateScore = 0;
+
+int slowDownCounter = 0;
+int slowDownActive = 0;
 
 void drawBlock(int x, int y, int number) {
 	uint16_t color;
@@ -61,6 +65,9 @@ void drawBlock(int x, int y, int number) {
 	else if (number == 8) {
 		color = Red;
 	}
+	else if (number == 99) {
+		color = White;
+	}
 	
 	x = x*14;
 	y = y*14;
@@ -69,6 +76,96 @@ void drawBlock(int x, int y, int number) {
 		for (j=0; j<14; j++) {
 			LCD_SetPoint(x+i, y+j, color);
 		}
+	}
+}
+
+void generatePowerUp(int matrice[20][10]) {
+	int row = (rand() % 20);
+	int col = (rand() % 10);
+	
+	int count = 0;
+	int i,j;
+	
+	for (i=0; i<20; i++) {
+		for (j=0; j<10; j++) {
+			if (matrice[i][j] > 10) {
+				count++;
+			}
+		}
+	}
+	
+	int randomNum = (rand() % count);
+	count = 0;
+	for (i=0; i<20; i++) {
+		for (j=0; j<10; j++) {
+			if (matrice[i][j] > 10) {
+				if (count == randomNum) {
+					matrice[i][j] = 99;
+					count++;
+				}else {
+					count++;
+				}
+			}
+		}
+	}
+	update_matrix = 1;
+}
+
+int countLines(int matrice[20][10]) {
+	int x, y;
+	int count = 0;
+	for (x=11; x<20; x++) {
+		int block = 0;
+		for (y=0; y<10; y++) {
+			if (matrice[x][y] > 10) {
+				block = 1;
+			}
+		}
+		if (block == 1) {
+			count++;
+		}
+	}
+	return count;
+}
+
+void generateMalus(int matrice[20][10]) {
+	int i,j;
+	for (j=0; j<10; j++) {
+		if (matrice[0][j] != 0) {
+			gameState = 2;
+			return;
+		}
+	}
+	for (i=0; i<20; i++) {
+		for (j=0; j<10; j++) {
+			if (i != 19) {
+				matrice[i][j] = matrice[i+1][j];
+			} else {
+				matrice[i][j] = 0;
+			}
+		}
+	}
+	
+	int randomNum = (rand() % 10);
+	int count = 0;
+	while (count < 7) {
+		while (matrice[19][randomNum] != 0) {
+			randomNum = (rand() % 10);
+		}
+		matrice[19][randomNum] = 11;
+		count++;
+	}
+	
+	
+}
+
+void activate_slow_down(void) {
+	if (LPC_TIM0->MR0 < 0xda120) {
+		slowDownActive = 1;
+		slowDownCounter = 15;
+		
+		LPC_TIM0->MR0 = 0xDA120;
+		LPC_TIM0->TC = 0;
 	}
 }
 
@@ -191,8 +288,11 @@ void drawMatrix(int matrice[20][10]) {
 			if (matrice[i][j] != 0 && matrice[i][j] < 10) {
 				drawBlock(j,i,matrice[i][j]);
 			}
-			else if (matrice[i][j] > 10) {
+			else if (matrice[i][j] > 10 && matrice[i][j] != 99) {
 				drawBlock(j,i,matrice[i][j]-10);
+			}
+			else if (matrice[i][j] == 99) {
+				drawBlock(j, i, 99);
 			}
 			else{
 				drawBlock(j,i,0);
@@ -274,7 +374,7 @@ extern uint8_t ScaleFlag; // <- ScaleFlag needs to visible in order for the emul
 int main (void) {
   	
 	SystemInit();  												/* System Initialization (i.e., PLL)  */
-  //LED_init();                           /* LED Initialization                 */
+  LED_init();                           /* LED Initialization                 */
   BUTTON_init();												/* BUTTON Initialization              */
 	joystick_init();
 	LCD_Initialization();
@@ -322,10 +422,13 @@ int main (void) {
 	//enable_timer(0);
 	
 	/* 3) Repetitive Interrupt Timer (RIT) */
-	init_RIT(0x350000);									/* RIT initialization 1 sec --> as in the systick timer, here the clock frequency is set to 100 MHz */
-	enable_RIT();
+	//init_RIT(0x350000);									/* RIT initialization 1 sec --> as in the systick timer, here the clock frequency is set to 100 MHz */
+	init_RIT(0x1312D0);
+	//enable_RIT();
 	
 	//LED_On(7);
+	
+	ADC_init();
 	
 	while(1) {
 		if (hard_drop == 1) {
@@ -362,6 +465,11 @@ int main (void) {
 			generateNewBlock = 1;
 			drawMatrix(matrice);
 			generateNewBlock = 0;
+			if (gameState == 3) {
+				GUI_Text(20, 50, (uint8_t *) "PRESS KEY1", White, Black);
+				GUI_Text(20, 70, (uint8_t *) "TO START", White, Black);
+				GUI_Text(20, 90, (uint8_t *) "A NEW GAME", White, Black);
+			}
 			update_matrix = 0;
 		}
 		if (updateScore == 1) {

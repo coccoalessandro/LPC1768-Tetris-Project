@@ -10,6 +10,8 @@
 #include "LPC17xx.h"
 #include "RIT.h"
 #include "../GLCD/GLCD.h"
+#include "../adc/adc.h"
+#include "../music/music.h"
 
 /******************************************************************************
 ** Function name:		RIT_IRQHandler
@@ -29,15 +31,93 @@ extern int currentScore;
 extern int topScore;
 extern int updateScore;
 extern int clearedLines;
+extern unsigned short AD_current;
+
+extern int slowDownCounter;
+extern int slowDownActive;
+extern void activate_slow_down(void);
+
+uint32_t speed;
+
+#define RIT_SEMIMINIMA 8
+#define RIT_MINIMA 16
+#define RIT_INTERA 32
+
+#define UPTICKS 1
+
+NOTE song[] =
+{
+    /* Jingle Bells – verse */
+    {e4, time_croma}, {e4, time_croma}, {e4, time_semicroma*2},
+    {e4, time_croma}, {e4, time_croma}, {e4, time_semicroma*2},
+    {e4, time_croma}, {g4, time_croma}, {c4, time_croma},
+    {d4, time_croma}, {e4, time_semicroma*2},
+    {f4, time_croma}, {f4, time_croma}, {f4, time_croma},
+    {f4, time_croma}, {e4, time_croma},
+    {e4, time_croma}, {e4, time_croma},
+    {e4, time_croma}, {d4, time_croma}, {d4, time_croma},
+    {e4, time_croma}, {d4, time_semicroma*2},
+    {g4, time_semicroma*2},
+    {pause, time_croma},
+
+    /* chorus */
+    {e4, time_croma}, {e4, time_croma}, {e4, time_semicroma*2},
+    {e4, time_croma}, {e4, time_croma}, {e4, time_semicroma*2},
+    {e4, time_croma}, {g4, time_croma}, {c4, time_croma},
+    {d4, time_croma}, {e4, time_semicroma*2},
+    {f4, time_croma}, {f4, time_croma}, {f4, time_croma},
+    {f4, time_croma}, {e4, time_croma},
+    {e4, time_croma}, {e4, time_croma},
+    {g4, time_croma}, {g4, time_croma},
+    {f4, time_croma}, {d4, time_croma},
+    {c4, time_semicroma*4},
+    {pause, time_semicroma*2}
+};
+
 
 void RIT_IRQHandler (void)
 {
+	static int currentNote = 0;
+	static int ticks = 0;
+	if(!isNotePlaying())
+	{
+		++ticks;
+		if(ticks == UPTICKS)
+		{
+			ticks = 0;
+			playNote(song[currentNote++]);
+		}
+	}
+	
+	if(currentNote == (sizeof(song) / sizeof(song[0])))
+	{
+		// choose one of the following
+		//disable_RIT();		// stop the music
+		currentNote = 0;	// restart the music
+	}
+	
+	if (slowDownActive == 1) {
+		if (slowDownCounter > 0) {
+			slowDownCounter--;
+			
+			speed = 0xda120;
+		} else {
+			slowDownActive = 0;
+		}
+	}else {
+		ADC_start_conversion();
+		speed = 0xda120 / (1 + (AD_current / 820));
+	}
+	
 	static int down1 = 0;
 	static int down2 = 0;
 	
+	//down1++;
+	//down2++;
+	
 	if ((LPC_GPIO2->FIOPIN & (1<<11)) == 0) {
 		down1++;
-		LED_On(0);
+		//LED_On(0);
 		if (down1 == 1) {
 			if (gameState == 0) {
 		enable_timer(0);
@@ -73,25 +153,34 @@ void RIT_IRQHandler (void)
 		currentScore = 0;
 		clearedLines = 0;
 		updateScore = 1;
+		update_matrix = 1;
 		gameState = 1;
 			}
 		}
 	}
 	else {
 			down1 = 0;
+			LPC_SC->EXTINT = (1<<1);
+			NVIC_EnableIRQ(EINT1_IRQn);							 /* disable Button interrupts			*/
+			
+			LPC_PINCON->PINSEL4    |= (1 << 22);     /* External interrupt 0 pin selection */
 		}
 	
-	if (gameState == 1) {
+	//if (gameState == 1) {
 		if ((LPC_GPIO2->FIOPIN & (1<<12)) == 0) {
 		down2++;
-		if (down2 == 1) {
+		if (down2 == 1 && gameState == 1) {
 			hard_drop = 1;
 		}
 	}
 	else {
 		down2 = 0;
+		LPC_SC->EXTINT = (1<<2);
+		NVIC_EnableIRQ(EINT2_IRQn);							 /* disable Button interrupts			*/
+		
+		LPC_PINCON->PINSEL4    |= (1 << 24);     /* External interrupt 0 pin selection */
 	}
-	
+	if (gameState == 1) {
 	if((LPC_GPIO1->FIOPIN & (1<<27)) == 0) {
 		// joystick left pressed
 		int moveLeft = collision(matrice, 1);
@@ -238,15 +327,22 @@ void RIT_IRQHandler (void)
 				i++;
 			}
 		}
-		
 	}	
-	else {
+	
+	else {	
 		if((LPC_GPIO1->FIOPIN & (1<<26)) == 0) {
 		// joystick down pressed
-		LPC_TIM0->MR0 = 0x6d090;
-		LPC_TIM0->TC = 0;
+			uint32_t soft_drop_speed = speed / 2;
+			if (LPC_TIM0->MR0 != soft_drop_speed) {
+				LPC_TIM0->MR0 = soft_drop_speed;
+				LPC_TIM0->TC = 0;
+			}
+			
 		} else {
-			LPC_TIM0->MR0 = 0xda120;
+			if (LPC_TIM0->MR0 != speed) {
+				LPC_TIM0->MR0 = speed;
+				LPC_TIM0->TC = 0;
+			}
 		}
 	}
 	}

@@ -22,6 +22,11 @@ void EINT0_IRQHandler (void)	  	/* INT0														 */
 
 void EINT1_IRQHandler (void)	  	/* KEY1														 */
 {
+	enable_RIT();										/* enable RIT to count 50ms				 */
+	NVIC_DisableIRQ(EINT1_IRQn);		/* disable Button interrupts	--> the button does not generate interrupts anymore */
+	LPC_PINCON->PINSEL4    &= ~(1 << 22);     /* GPIO pin selection 	 */
+	
+	LPC_SC->EXTINT &= (1 << 1);     /* clear pending interrupt				 */
 	/*
   if (gameState == 0) {
 		enable_timer(0);
@@ -59,7 +64,7 @@ void EINT1_IRQHandler (void)	  	/* KEY1														 */
 		gameState = 1;
 	}
 	*/
-	LPC_SC->EXTINT &= (1 << 1);     /* clear pending interrupt         */
+	//LPC_SC->EXTINT &= (1 << 1);     /* clear pending interrupt         */
 }
 
 void EINT2_IRQHandler (void)	  	/* KEY2														 */
@@ -67,7 +72,12 @@ void EINT2_IRQHandler (void)	  	/* KEY2														 */
 	// tetromino falls instantly
 	
 	//hard_drop = 1;
-  LPC_SC->EXTINT &= (1 << 2);     /* clear pending interrupt         */  
+	
+  enable_RIT();										/* enable RIT to count 50ms				 */
+	NVIC_DisableIRQ(EINT2_IRQn);		/* disable Button interrupts	--> the button does not generate interrupts anymore */
+	LPC_PINCON->PINSEL4    &= ~(1 << 24);     /* GPIO pin selection 	 */
+	
+	LPC_SC->EXTINT &= (1 << 2);     /* clear pending interrupt				 */
 }
 
 
