@@ -77,6 +77,7 @@ NOTE song[] =
 
 void RIT_IRQHandler (void)
 {
+	/*
 	static int currentNote = 0;
 	static int ticks = 0;
 	if(!isNotePlaying())
@@ -95,7 +96,7 @@ void RIT_IRQHandler (void)
 		//disable_RIT();		// stop the music
 		currentNote = 0;	// restart the music
 	}
-	
+	*/
 	if (slowDownActive == 1) {
 		if (slowDownCounter > 0) {
 			slowDownCounter--;
@@ -159,12 +160,14 @@ void RIT_IRQHandler (void)
 		}
 	}
 	else {
+		if (down1 > 0) {
 			down1 = 0;
 			LPC_SC->EXTINT = (1<<1);
 			NVIC_EnableIRQ(EINT1_IRQn);							 /* disable Button interrupts			*/
 			
 			LPC_PINCON->PINSEL4    |= (1 << 22);     /* External interrupt 0 pin selection */
 		}
+	}
 	
 	//if (gameState == 1) {
 		if ((LPC_GPIO2->FIOPIN & (1<<12)) == 0) {

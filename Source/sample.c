@@ -162,7 +162,7 @@ void generateMalus(int matrice[20][10]) {
 void activate_slow_down(void) {
 	if (LPC_TIM0->MR0 < 0xda120) {
 		slowDownActive = 1;
-		slowDownCounter = 15;
+		slowDownCounter = 45;
 		
 		LPC_TIM0->MR0 = 0xDA120;
 		LPC_TIM0->TC = 0;
